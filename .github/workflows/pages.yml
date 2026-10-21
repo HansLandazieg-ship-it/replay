@@ -5,6 +5,7 @@ on:
     branches: [main]
   schedule:
     - cron: '23 4 * * *'   # каждый день в 07:23 по Москве
+    - cron: '47 */3 * * *'  # каждые 3 часа: докачка истории, пока она не скачана целиком
   workflow_dispatch:
 
 permissions:

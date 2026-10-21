@@ -35,13 +35,26 @@ def fetch_year(name, duka, year):
         if d.weekday() != 5:
             days.append(d)
         d += dt.timedelta(days=1)
-    with cf.ThreadPoolExecutor(6) as ex:
-        res = list(ex.map(lambda x: u._safe(u.fetch_day, duka, x), days))
-    bars = []
-    for day, r in zip(days, res):
-        if isinstance(r, Exception):
-            raise RuntimeError(f"{name} {day}: {r}")
-        bars.extend(r)
+    got = {}
+    with cf.ThreadPoolExecutor(2) as ex:
+        for day, r in zip(days, ex.map(lambda x: u._safe(u.fetch_day, duka, x), days)):
+            if not isinstance(r, Exception):
+                got[day] = r
+    # повторяем неудачные дни по одному, с паузами: Dukascopy не любит частые запросы
+    for attempt in range(3):
+        left = [x for x in days if x not in got]
+        if not left:
+            break
+        time.sleep(10 * (attempt + 1))
+        for day in left:
+            r = u._safe(u.fetch_day, duka, day)
+            if not isinstance(r, Exception):
+                got[day] = r
+            time.sleep(1.5)
+    left = [x for x in days if x not in got]
+    if left:
+        raise RuntimeError(f"{len(left)} дней не скачались, например {left[0]}")
+    bars = [b for day in days for b in got[day]]
     bars.sort(key=lambda b: b[0])
     return bars
 
