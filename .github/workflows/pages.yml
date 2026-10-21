@@ -1,0 +1,52 @@
+name: Котировки и публикация
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 4 * * *'   # каждый день в 07:23 по Москве
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Докачать котировки Dukascopy и новости Forex Factory
+        continue-on-error: true
+        run: python3 tools/update_data.py
+
+      - name: Сохранить новые данные в репозиторий
+        continue-on-error: true
+        run: |
+          git add data
+          if git diff --cached --quiet; then
+            echo "Новых данных нет"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Данные на $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
