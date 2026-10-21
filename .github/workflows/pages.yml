@@ -24,10 +24,17 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Докачать котировки Dukascopy и новости Forex Factory
         continue-on-error: true
         run: python3 tools/update_data.py
+
+      - name: Докачать историю по годам (только недостающие)
+        continue-on-error: true
+        timeout-minutes: 45
+        run: python3 tools/fetch_history.py
 
       - name: Сохранить новые данные в репозиторий
         continue-on-error: true
