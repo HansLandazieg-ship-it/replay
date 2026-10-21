@@ -31,11 +31,6 @@ jobs:
         continue-on-error: true
         run: python3 tools/update_data.py
 
-      - name: Докачать историю по годам (только недостающие)
-        continue-on-error: true
-        timeout-minutes: 45
-        run: python3 tools/fetch_history.py
-
       - name: Сохранить новые данные в репозиторий
         continue-on-error: true
         run: |
@@ -57,3 +52,25 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      # История докачивается после публикации, чтобы сайт не ждал. Готовые годы попадут на сайт при следующем запуске.
+      - name: Докачать историю по годам (только недостающие)
+        continue-on-error: true
+        timeout-minutes: 30
+        env:
+          HIST_MINUTES: '25'
+        run: python3 tools/fetch_history.py
+
+      - name: Сохранить историю в репозиторий
+        continue-on-error: true
+        run: |
+          git pull --rebase --quiet origin main || true
+          git add data/hist
+          if git diff --cached --quiet; then
+            echo "Новой истории нет"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "История на $(date -u +%Y-%m-%d)"
+            git push
+          fi

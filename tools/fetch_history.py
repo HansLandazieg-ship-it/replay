@@ -90,11 +90,17 @@ def build_index():
 def main():
     os.makedirs(HIST, exist_ok=True)
     started = time.time()
+    limit = float(os.environ.get("HIST_MINUTES", "25")) * 60
+    build_index()
     for year in years_wanted():
         for name, duka in u.SYMBOLS:
             path = os.path.join(HIST, f"{name}-{year}.txt")
             if os.path.exists(path):
                 continue
+            if time.time() - started > limit:
+                print("Время вышло, остальное докачается в следующий запуск")
+                build_index()
+                return
             try:
                 bars = fetch_year(name, duka, year)
                 if bars:
@@ -112,9 +118,7 @@ def main():
                 print(f"Новости {year}: {len(ev)}")
             except Exception as e:
                 print(f"Новости {year}: не скачались ({e})")
-        if time.time() - started > 40 * 60:
-            print("Время вышло, остальное докачается в следующий запуск")
-            break
+        build_index()
     build_index()
 
 
