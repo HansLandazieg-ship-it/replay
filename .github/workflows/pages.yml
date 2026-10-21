@@ -19,6 +19,9 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,16 +42,11 @@ jobs:
             git push
           fi
 
-      # Публикация через GitHub Pages включается переменной репозитория DEPLOY_PAGES=true.
-      # Для закрытого сайта на Cloudflare Pages она не нужна: Cloudflare сам подхватывает новые данные.
       - uses: actions/configure-pages@v5
-        if: vars.DEPLOY_PAGES == 'true'
 
       - uses: actions/upload-pages-artifact@v3
-        if: vars.DEPLOY_PAGES == 'true'
         with:
           path: .
 
       - id: deployment
-        if: vars.DEPLOY_PAGES == 'true'
         uses: actions/deploy-pages@v4
