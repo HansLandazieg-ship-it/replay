@@ -53,6 +53,9 @@ button{cursor:pointer}
 .pickhint{position:absolute;left:calc(50% + 19px);top:10px;transform:translateX(-50%);background:var(--blue);color:#fff;border-radius:5px;padding:5px 12px;font-size:12px;font-weight:600;pointer-events:none;z-index:2;white-space:nowrap}
 .clock{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:5px 9px;white-space:nowrap}
 .clock small{color:var(--muted)}
+.histlist{display:flex;flex-direction:column;gap:6px}
+.histrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px}
+.histrow b{min-width:44px}
 .appupd{border:1px solid var(--line2);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:6px}
 .demo-pill{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 8px;white-space:nowrap}
 .layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:8px;flex:1;min-height:440px}
@@ -332,6 +335,14 @@ td.txt{font-family:var(--sans)}
       </div>
       <div class="hint" id="appUpdStatus"></div>
     </div>
+    <div class="appupd" id="histBox">
+      <div class="row" style="flex-wrap:wrap;align-items:center">
+        <div style="flex:1 1 220px"><b>Более ранняя история</b>: котировки Dukascopy и новости Forex Factory с 2015 по 2023 год. Загружаются на устройство только по запросу и потом работают без интернета.</div>
+        <button class="btn" id="histAll" style="flex:0 0 auto">Загрузить все годы</button>
+      </div>
+      <div class="histlist" id="histList"></div>
+      <div class="hint" id="histStatus"></div>
+    </div>
     <div class="datalist" id="dataList"></div>
     <div class="grid2">
       <div class="field"><label for="impSym">Файлы относятся к</label>
@@ -466,6 +477,10 @@ async function idbDel(k){try{const db=await idb();await new Promise((res)=>{cons
 
 /* ============ Встроенные котировки и новости ============ */
 const DATA_VER='duka-2024-2026';
+const HIST_BASE=window.__PWA?'data/hist/':'https://hanslandazieg-ship-it.github.io/replay/data/hist/';
+let HIST_INDEX=null,histBusy=false;
+function concatData(parts,source){const n=parts.reduce((a,p)=>a+p.n,0);const t=new Float64Array(n),o=new Float64Array(n),h=new Float64Array(n),l=new Float64Array(n),c=new Float64Array(n);let k=0;
+  for(const p of parts){t.set(p.t,k);o.set(p.o,k);h.set(p.h,k);l.set(p.l,k);c.set(p.c,k);k+=p.n}return mkData(t,o,h,l,c,false,source)}
 function decodeBars(txt){
   const lines=txt.split('\n');const head=lines[0].split(',');const sc=+head[1];let t=+head[2]-180,prevC=+head[3];
   const n=lines.length-1;const T=new Float64Array(n),O=new Float64Array(n),H=new Float64Array(n),L=new Float64Array(n),C=new Float64Array(n);let m=0;
@@ -1301,7 +1316,7 @@ $('back').addEventListener('click',()=>{stopPlay();stepBack();save();refreshAll(
 $('jumpBtn').addEventListener('click',()=>{
   const t=fromLocalInput($('jumpTo').value);const D=DATA[S.settings.sym];if(t==null||!D){toast('Выберите дату и время.');return}
   stopPlay();
-  const i=bsLE(D.t,D.n,Math.min(t,D.to));if(i<0){toast('Эта дата раньше начала истории.');return}
+  const i=bsLE(D.t,D.n,Math.min(t,D.to));if(i<0){toast('Эта дата раньше загруженной истории. Более ранние годы можно загрузить в «Котировки».');return}
   const nt=D.t[i];
   if(chart.picking()){startSimAt(nt);return}
   if(nt<S.T){if(S.positions.length||S.orders.length){toast('Назад нельзя, пока есть открытые позиции или ордера.');return}
@@ -1414,7 +1429,7 @@ $('copyCsv').addEventListener('click',()=>{
   navigator.clipboard.writeText(txt).then(()=>toast('Сделки скопированы — вставьте в Excel или Google Таблицы.')).catch(()=>toast('Браузер не дал доступ к буферу обмена.'));
 });
 // данные
-$('openData').addEventListener('click',()=>{stopPlay();renderDataList();if(APP)renderAppUpd();$('dataModal').hidden=false});
+$('openData').addEventListener('click',()=>{stopPlay();renderDataList();if(APP)renderAppUpd();renderHist();$('dataModal').hidden=false});
 $('appUpdBtn').addEventListener('click',()=>startUpdate(false));
 $('closeData').addEventListener('click',()=>{$('dataModal').hidden=true});
 $('fileInp').addEventListener('change',e=>{const f=[...e.target.files];e.target.value='';if(f.length)importFiles(f)});
@@ -1457,8 +1472,48 @@ async function loadAllData(){
     if(bundled[s]&&own){const B=bundled[s];const T=[...B.t,...own.t],O=[...B.o,...own.o],H=[...B.h,...own.h],L=[...B.l,...own.l],C=[...B.c,...own.c];const [t,o,h,l,c]=aggregateBase(T,O,H,L,C);DATA[s]=mkData(t,o,h,l,c,false,'Dukascopy + загруженные файлы')}
     else DATA[s]=bundled[s]||own||genDemo(s)}
   if(!NEWS.length){const nw=await idbGet('news');if(Array.isArray(nw))NEWS=nw.sort((a,b)=>a[0]-b[0])}
+  const hy=((await idbGet('histyears'))||[]).slice().sort();
+  if(hy.length){
+    for(const s of SYMS){const base=DATA[s];if(!base||base.demo)continue;const parts=[];
+      for(const y of hy){const txt=await idbGet(`hist:${s}:${y}`);if(!txt)continue;const d=decodeBars(txt);if(d.n&&d.t[d.n-1]<base.t[0])parts.push(d)}
+      if(parts.length)DATA[s]=concatData([...parts,base],base.source+' + история с '+new Date(parts[0].t[0]*1000).getUTCFullYear())}
+    for(const y of hy){const nw=await idbGet(`hist:news:${y}`);if(Array.isArray(nw))for(const e of nw){e[0]=Math.round(e[0]/300)*300;NEWS.push(e)}}
+    NEWS.sort((a,b)=>a[0]-b[0])}
   TFC={};NEWSC.key='';newsKey='';
 }
+/* ============ Ранняя история по запросу ============ */
+const mb=b=>(b/1048576).toFixed(1).replace('.',',')+' МБ';
+async function renderHist(){
+  const list=$('histList'),st=$('histStatus');
+  if(!HIST_INDEX){list.innerHTML='';st.textContent='Проверяю, какие годы доступны…';
+    try{const r=await fetch(HIST_BASE+'index.json',{cache:'no-cache'});if(!r.ok)throw 0;HIST_INDEX=await r.json()}
+    catch(e){st.textContent='Список годов недоступен: нет интернета или история ещё скачивается на сервере. Попробуйте позже.';$('histAll').disabled=true;return}}
+  const have=(await idbGet('histyears'))||[];
+  const years=Object.keys(HIST_INDEX).sort().reverse();
+  if(!years.length){st.textContent='История ещё скачивается на сервере. Загляните сюда через полчаса.';$('histAll').disabled=true;return}
+  list.innerHTML=years.map(y=>{const it=HIST_INDEX[y];const size=['EURUSD','GER40','news'].reduce((a,k)=>a+(it[k]?it[k].bytes:0),0);
+    const parts=[it.EURUSD?'EUR/USD':'',it.GER40?'GER40':'',it.news?'новости':''].filter(Boolean).join(', ');
+    const ok=have.includes(y);
+    return`<div class="histrow"><b class="num">${y}</b><span class="hint" style="flex:1;min-width:150px">${parts} · ${mb(size)}</span>${ok?`<span class="pos">загружено</span><button class="mini" data-hdel="${y}">Удалить</button>`:`<button class="mini" data-hload="${y}">Загрузить</button>`}</div>`}).join('');
+  const missing=years.filter(y=>!have.includes(y));$('histAll').disabled=!missing.length||histBusy;
+  if(!histBusy)st.textContent=have.length?`На устройстве годы: ${have.slice().sort().join(', ')}.`:'Пока на устройстве только 2024–2026.';
+}
+async function loadHistYears(years){
+  if(histBusy||!HIST_INDEX)return;histBusy=true;const st=$('histStatus');const have=(await idbGet('histyears'))||[];let done=0,fail=0;
+  try{for(const y of years){const it=HIST_INDEX[y];if(!it)continue;st.textContent=`Загружаю ${y}… (${++done} из ${years.length})`;
+      try{for(const s of SYMS){if(!it[s])continue;const r=await fetch(`${HIST_BASE}${s}-${y}.txt`);if(!r.ok)throw new Error(r.status);await idbPut(`hist:${s}:${y}`,await r.text())}
+        if(it.news){const r=await fetch(`${HIST_BASE}news-${y}.json`);if(r.ok)await idbPut(`hist:news:${y}`,await r.json())}
+        if(!have.includes(y))have.push(y);await idbPut('histyears',have)}
+      catch(e){fail++}}
+    st.textContent='Собираю график…';await loadAllData();clampT();afterDataChange();
+    toast(fail?`Загружено не всё: ${fail} из ${years.length} годов не скачались. Проверьте интернет.`:`История загружена. Котировки теперь с ${fmtDT(DATA.EURUSD.from).slice(0,10)}.`);
+  }finally{histBusy=false;renderHist()}
+}
+async function removeHistYear(y){const have=((await idbGet('histyears'))||[]).filter(x=>x!==y);await idbPut('histyears',have);
+  for(const s of SYMS)await idbDel(`hist:${s}:${y}`);await idbDel(`hist:news:${y}`);await loadAllData();clampT();afterDataChange();renderHist();toast(`${y} год удалён с устройства.`)}
+$('histList').addEventListener('click',e=>{const a=e.target.closest('[data-hload]'),d=e.target.closest('[data-hdel]');if(a)loadHistYears([a.dataset.hload]);if(d)removeHistYear(d.dataset.hdel)});
+$('histAll').addEventListener('click',async()=>{if(!HIST_INDEX)return;const have=(await idbGet('histyears'))||[];loadHistYears(Object.keys(HIST_INDEX).sort().reverse().filter(y=>!have.includes(y)))});
+
 /* ============ Режим приложения: автообновление ============ */
 let APP=null,updPoll=null;
 function renderAppUpd(st){
@@ -1494,6 +1549,7 @@ async function startUpdate(auto){
   afterDataChange();
   if(SYMS.every(s=>DATA[s].demo)&&!S.history.length)toast('Сейчас открыты демо-данные. Загрузите реальные котировки через кнопку «Котировки».');
   if(window.__PWA&&'serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+  try{if(!localStorage.getItem('replay.histHint')&&!((await idbGet('histyears'))||[]).length&&SYMS.some(s=>!DATA[s].demo)){localStorage.setItem('replay.histHint','1');setTimeout(()=>toast('Нужна история раньше 2024 года? «Котировки» → «Более ранняя история».'),2500)}}catch(e){}
   if(APP){document.title='Тренажёр Replay';setInterval(()=>{fetch('api/ping',{cache:'no-store'}).catch(()=>{})},4000);$('appUpd').hidden=false;renderAppUpd();maybeAutoUpdate()}
 })();
 </script>

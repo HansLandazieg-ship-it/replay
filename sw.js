@@ -1,5 +1,5 @@
 // Офлайн-режим: страница и котировки сохраняются на телефоне.
-const SHELL = 'replay-shell-v3';
+const SHELL = 'replay-shell-v4';
 const DATA = 'replay-data';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -17,6 +17,8 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin) return;
+  // годы истории хранятся в самом приложении, второй копией их не держим
+  if (url.pathname.includes('/data/hist/') && !url.pathname.endsWith('index.json')) return;
   const isData = url.pathname.includes('/data/');
   const isPage = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('index.html');
   if (isData || isPage) {
