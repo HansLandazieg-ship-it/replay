@@ -2,7 +2,7 @@ name: История по годам
 
 on:
   schedule:
-    - cron: '47 */3 * * *'   # каждые 3 часа, пока все годы не скачаются
+    - cron: '47 * * * *'   # каждый час, пока все годы не скачаются
   workflow_dispatch:
   push:
     branches: [main]
@@ -18,7 +18,7 @@ concurrency:
 jobs:
   history:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,7 +27,7 @@ jobs:
       - name: Докачать недостающие годы
         continue-on-error: true
         env:
-          HIST_MINUTES: '30'
+          HIST_MINUTES: '28'
         run: python3 tools/fetch_history.py
 
       - name: Сохранить историю в репозиторий
