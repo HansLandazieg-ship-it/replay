@@ -175,6 +175,7 @@ td.txt{font-family:var(--sans)}
   #sym{max-width:120px}
   #speed{max-width:100px}
   #stepUnit{max-width:140px}
+  #jumpSess{max-width:150px}
   .clock{font-size:11px;padding:5px 6px}
   #jumpTo{flex:1 1 140px;min-width:0}
   .chartwrap{height:62vh;height:62svh;min-height:330px}
@@ -223,6 +224,14 @@ td.txt{font-family:var(--sans)}
     <select id="stepUnit" class="sel" aria-label="Шаг воспроизведения">
       <option value="tf">Шаг: целая свеча</option>
       <option value="base">Шаг: 3 минуты</option>
+    </select>
+    <select id="jumpSess" class="sel" aria-label="Перемотать к сессии">
+      <option value="">⏩ Перемотать к…</option>
+      <option value="asia_end">концу Азии</option>
+      <option value="fra">открытию Франкфурта</option>
+      <option value="lon">открытию Лондона</option>
+      <option value="ny">открытию Нью-Йорка</option>
+      <option value="ny_end">закрытию Нью-Йорка</option>
     </select>
     <span class="clock" id="clock">—</span>
     <span class="spacer"></span>
@@ -1338,6 +1347,21 @@ $('simBtn').addEventListener('click',()=>{stopPlay();
   else{chart.setPick(true);refreshAll()}
 });
 $('pickBtn').addEventListener('click',()=>{stopPlay();chart.setPick(true);refreshAll()});
+function jumpToSession(key){
+  if(!S.sim){toast('Перемотка работает в режиме «Симулятор рынка».');return}
+  const D=DATA[S.settings.sym];if(!D||S.T==null)return;
+  const def=Object.fromEntries(SESSION_DEFAULTS.map(x=>[x.id,x]));
+  const spec={asia_end:def.asia.e,fra:def.fra.s,lon:def.lon.s,ny:def.ny.s,ny_end:def.ny.e}[key];
+  const names={asia_end:'конец Азии',fra:'открытие Франкфурта',lon:'открытие Лондона',ny:'открытие Нью-Йорка',ny_end:'закрытие Нью-Йорка'};
+  const cur=cursor(S.settings.sym);let day=Math.floor((S.T+3*3600)/86400);
+  for(let k=0;k<10;k++,day++){const dd=new Date(day*864e5);const tt=zoneTime(spec,dd.getUTCFullYear(),dd.getUTCMonth(),dd.getUTCDate());
+    const nxt=lowerB(D.t,D.n,tt);const idx=nxt-1;
+    if(idx<=cur)continue;if(nxt>=D.n){toast('Дальше истории нет.');return}
+    if(D.t[nxt]-tt>3600)continue; // в этот день торгов не было
+    stopPlay();advanceTo(D.t[idx]);save();chart.follow();refreshAll();toast('Перемотано на '+names[key]+': '+fmtDT(tt));return}
+  toast('Не нашёл ближайшую сессию.');
+}
+$('jumpSess').addEventListener('change',e=>{const v=e.target.value;e.target.value='';if(v)jumpToSession(v)});
 $('play').addEventListener('click',()=>playTimer?stopPlay():startPlay());
 $('fwd').addEventListener('click',()=>{stopPlay();if(stepFwd(S.settings.stepUnit)){save();refreshAll()}});
 $('back').addEventListener('click',()=>{stopPlay();stepBack(S.settings.stepUnit);save();refreshAll()});
