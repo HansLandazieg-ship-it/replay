@@ -917,18 +917,22 @@ const chart=(()=>{
       ctx.fillStyle=C.shade;ctx.fillRect(x,0,pw()-x,ph());ctx.strokeStyle=C.blue;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,ph());ctx.stroke();ctx.lineWidth=1}
     // ось
     ctx.fillStyle=C.line;ctx.fillRect(pw(),0,1,H);ctx.fillRect(0,ph(),W,1);
+    // точное время реплея под текущей свечой старшего ТФ
+    if(TFSEC[tf]>BASE){const xc=Math.round(xOf(V.k));if(xc>0&&xc<pw()){const ct=DATA[sym].t[V.cur];const tx=TFSEC[tf]>=86400?fmtDT(ct).slice(0,5)+' '+fmtTime(ct):fmtTime(ct);
+      ctx.font='600 11px '+css('--mono');const w=ctx.measureText(tx).width+10;const xx=Math.max(0,Math.min(pw()-w,xc-w/2));
+      ctx.fillStyle=C.bw?'#2962ff':C.blue;ctx.fillRect(xx,ph()+1,w,TX-1);ctx.fillStyle='#fff';ctx.textBaseline='middle';ctx.fillText(tx,xx+5,ph()+TX/2+.5);ctx.textBaseline='alphabetic'}}
     // перекрестие
-    let lb=bar(V,V.k);
+    let lb=bar(V,V.k),lbi=V.k;
     if(hover&&!drag?.pan){
       const {x,y}=hover;if(x<pw()&&y<ph()){
         const i=Math.round(rightIdx-(pw()-x)/spacing);
         ctx.strokeStyle=C.cross;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(0,y+.5);ctx.lineTo(pw(),y+.5);ctx.moveTo(Math.round(xOf(i))+.5,0);ctx.lineTo(Math.round(xOf(i))+.5,ph());ctx.stroke();ctx.setLineDash([]);
         axisTag(pOf(y),C.line,C.fg);
-        if(i>=0&&i<=V.k){lb=bar(V,i);const tx=fmtDT(lb.t);const w=ctx.measureText(tx).width+12;const xx=Math.min(Math.max(xOf(i)-w/2,0),pw()-w);ctx.fillStyle=C.line;ctx.fillRect(xx,ph()+1,w,TX-1);ctx.fillStyle=C.fg;ctx.fillText(tx,xx+6,H-8)}
+        if(i>=0&&i<=V.k){lb=bar(V,i);lbi=i;const tx=fmtDT(lb.t);const w=ctx.measureText(tx).width+12;const xx=Math.min(Math.max(xOf(i)-w/2,0),pw()-w);ctx.fillStyle=C.line;ctx.fillRect(xx,ph()+1,w,TX-1);ctx.fillStyle=C.fg;ctx.fillText(tx,xx+6,H-8)}
       }
     }
     const ch=lb.c-lb.o,cls=ch>=0?'pos':'neg';
-    $('legend').innerHTML=`<b>${esc(SPECS[sym].name)} · ${esc(TFS.find(x=>x[0]===tf)[2])}</b><span>${fmtDT(lb.t)}</span><span>O <b class="${cls}">${lb.o.toFixed(dig)}</b></span><span>H <b class="${cls}">${lb.h.toFixed(dig)}</b></span><span>L <b class="${cls}">${lb.l.toFixed(dig)}</b></span><span>C <b class="${cls}">${lb.c.toFixed(dig)}</b></span>`;
+    $('legend').innerHTML=`<b>${esc(SPECS[sym].name)} · ${esc(TFS.find(x=>x[0]===tf)[2])}</b><span>${fmtDT(lb.t)}${lbi===V.k&&TFSEC[tf]>BASE?` · сейчас <b>${fmtTime(DATA[sym].t[V.cur])}</b>`:''}</span><span>O <b class="${cls}">${lb.o.toFixed(dig)}</b></span><span>H <b class="${cls}">${lb.h.toFixed(dig)}</b></span><span>L <b class="${cls}">${lb.l.toFixed(dig)}</b></span><span>C <b class="${cls}">${lb.c.toFixed(dig)}</b></span>`;
     updatePosBar();
   }
   function tri(x,y,side){ctx.fillStyle=side===1?C.blue:C.down;ctx.beginPath();if(side===1){ctx.moveTo(x,y+4);ctx.lineTo(x-5,y+12);ctx.lineTo(x+5,y+12)}else{ctx.moveTo(x,y-4);ctx.lineTo(x-5,y-12);ctx.lineTo(x+5,y-12)}ctx.fill()}
