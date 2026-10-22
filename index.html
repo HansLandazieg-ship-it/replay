@@ -898,11 +898,11 @@ const chart=(()=>{
     drawDrawings();
     if(S.sim&&!picking)for(const o of S.orders){if(o.sym!==sym)continue;
       hline(o.price,o.side===1?C.blue:C.down,[6,4],`${o.side===1?'BUY':'SELL'} ${o.type==='limit'?'LIMIT':'STOP'} ${o.lots}`,{kind:'order',ref:o});
-      if(o.sl!=null)hline(o.sl,C.down,[2,4],'SL ордера',{kind:'osl',ref:o});
+      if(o.sl!=null)hline(o.sl,C.down,[2,4],`SL ${slTxt(o.sym,o.side,o.price,o.sl,o.lots)}`,{kind:'osl',ref:o});
       if(o.tp!=null)hline(o.tp,C.up,[2,4],'TP ордера',{kind:'otp',ref:o})}
     if(S.sim&&!picking)for(const p of S.positions){if(p.sym!==sym)continue;const f=floating(p);
       hline(p.entry,C.blue,[],`${p.side===1?'BUY':'SELL'} ${p.lots}  ${fmtMoney(f)}`,null);
-      if(p.sl!=null)hline(p.sl,C.down,[5,3],`SL  ${fmtMoney((p.sl-p.entry)*p.side*vpp(p.sym,S.T)*p.lots)}`,{kind:'sl',ref:p});
+      if(p.sl!=null)hline(p.sl,C.down,[5,3],`SL  ${slTxt(p.sym,p.side,p.entry,p.sl,p.lots)}`,{kind:'sl',ref:p});
       if(p.tp!=null)hline(p.tp,C.up,[5,3],`TP  ${fmtMoney((p.tp-p.entry)*p.side*vpp(p.sym,S.T)*p.lots)}`,{kind:'tp',ref:p})}
     // текущая цена
     const yb=yOf(bid);const pc=C.tag||(bid>=V.part.o?C.up:C.down);ctx.strokeStyle=pc;ctx.setLineDash([1,2]);ctx.beginPath();ctx.moveTo(0,yb);ctx.lineTo(pw(),yb);ctx.stroke();ctx.setLineDash([]);
@@ -1127,7 +1127,8 @@ const chart=(()=>{
         else d.pts[k]=np}}
     else if(drag?.line){const d=SPECS[S.settings.sym].digits;const pr=+pOf(p.y).toFixed(d);const L=drag.line;
       if(L.kind==='sl')L.ref.sl=pr;else if(L.kind==='tp')L.ref.tp=pr;else if(L.kind==='order'){const dd=pr-L.ref.price;L.ref.price=pr;if(L.ref.sl!=null)L.ref.sl=+(L.ref.sl+dd).toFixed(d);if(L.ref.tp!=null)L.ref.tp=+(L.ref.tp+dd).toFixed(d)}
-      else if(L.kind==='osl')L.ref.sl=pr;else if(L.kind==='otp')L.ref.tp=pr}
+      else if(L.kind==='osl')L.ref.sl=pr;else if(L.kind==='otp')L.ref.tp=pr;
+      if(L.kind==='osl'||L.kind==='order')resizeOrder(L.ref)}
     else if(!picking){
       if(tool!=='cursor'){$('ntip').hidden=true}
       else{const onNews=newsTip(p);const near=p.x<pw()&&hits.some(x=>Math.abs(x.y-p.y)<=6);
@@ -1184,7 +1185,7 @@ function place(side){
     const bid=bidNow(sym),ref=side===1?bid+spreadP(sym):bid;
     const ok=tk.type==='limit'?(side===1?r.entry<ref:r.entry>ref):(side===1?r.entry>ref:r.entry<ref);
     if(!ok){toast(tk.type==='limit'?'Лимитный ордер ставится лучше текущей цены: Buy Limit ниже, Sell Limit выше.':'Стоп-ордер ставится хуже текущей цены: Buy Stop выше, Sell Stop ниже.');return}
-    S.orders.push({id:S.nextId++,sym,side,type:tk.type,price:r.entry,lots:r.lots,sl:r.sl,tp:r.tp,tc:S.T});
+    S.orders.push({id:S.nextId++,sym,side,type:tk.type,price:r.entry,lots:r.lots,sl:r.sl,tp:r.tp,tc:S.T,risk:tk.useRisk&&r.sl!=null?num(tk.risk):null});
     toast(`Ордер ${side===1?'Buy':'Sell'} ${tk.type==='limit'?'Limit':'Stop'} ${fmtP(sym,r.entry)} выставлен`);
   }
   save();refreshAll();
@@ -1355,6 +1356,10 @@ $('dClear').addEventListener('click',e=>{const b=e.currentTarget;if(b.dataset.c!
 $('sessBtn').addEventListener('click',()=>{S.settings.showSessions=!S.settings.showSessions;if(S.settings.showSessions&&TFSEC[S.settings.tf]>3600)toast('Сессии видны на таймфреймах от 3м до 1ч.');syncDrawUi();save();chart.request()});
 syncDrawUi();
 /* ============ Позиция с графика ============ */
+function slTxt(sym,side,entry,sl,lots){const v=(sl-entry)*side*vpp(sym,S.T)*lots;return`${fmtMoney(v)} (${(v/S.balance*100).toFixed(2)}%)`}
+// объём отложенного ордера подстраивается под заданный риск при переносе стопа
+function resizeOrder(o){if(!(o.risk>0)||o.sl==null)return;const dist=Math.abs(o.price-o.sl);if(!dist)return;
+  o.lots=Math.max(0.01,Math.floor(S.balance*o.risk/100/(dist*vpp(o.sym,S.T))*100)/100)}
 function placeFromTool(d,mode){
   if(!S.sim){toast('Торговать можно в режиме «Симулятор рынка».');return false}
   const sym=S.settings.sym,sp=SPECS[sym];const side=d.type==='long'?1:-1;
@@ -1371,7 +1376,7 @@ function placeFromTool(d,mode){
   else{const ref=side===1?ask:bid;
     if(Math.abs(entry-ref)<sp.pip*0.5){toast('Вход совпадает с текущей ценой — нажмите «По рынку».');return false}
     const type=side===1?(entry<ref?'limit':'stop'):(entry>ref?'limit':'stop');
-    S.orders.push({id:S.nextId++,sym,side,type,price:entry,lots,sl,tp,tc:S.T});
+    S.orders.push({id:S.nextId++,sym,side,type,price:entry,lots,sl,tp,tc:S.T,risk:riskPct});
     toast(`Ордер ${side===1?'Buy':'Sell'} ${type==='limit'?'Limit':'Stop'} ${fmtP(sym,entry)} · ${lots} лот`)}
   save();refreshAll();return true;
 }
