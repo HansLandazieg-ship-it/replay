@@ -15,6 +15,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import update_data as u  # noqa: E402
 
 HIST = os.path.join(u.DATA, "hist")
+LOG = []
+
+
+def log(msg):
+    print(msg)
+    LOG.append(f"{dt.datetime.now(dt.timezone.utc):%Y-%m-%d %H:%M} {msg}")
+
 
 
 def years_wanted():
@@ -97,6 +104,10 @@ def build_index():
             idx.setdefault(year, {})["news"] = {"bytes": os.path.getsize(p),
                                                 "events": len(json.load(open(p, encoding="utf-8")))}
     write(os.path.join(HIST, "index.json"), json.dumps(idx, ensure_ascii=False, separators=(",", ":")))
+    if LOG:
+        old = open(os.path.join(HIST, "log.txt"), encoding="utf-8").read().splitlines()[-200:] if os.path.exists(os.path.join(HIST, "log.txt")) else []
+        write(os.path.join(HIST, "log.txt"), "\n".join(old + LOG) + "\n")
+        LOG.clear()
     return idx
 
 
@@ -111,26 +122,26 @@ def main():
             if os.path.exists(path):
                 continue
             if time.time() - started > limit:
-                print("Время вышло, остальное докачается в следующий запуск")
+                log("Время вышло, остальное докачается в следующий запуск")
                 build_index()
                 return
             try:
                 bars = fetch_year(name, duka, year)
                 if bars:
                     write(path, u.encode_series(name, 100000 if name == "EURUSD" else 1000, bars))
-                    print(f"{name} {year}: {len(bars)} свечей")
+                    log(f"{name} {year}: {len(bars)} свечей")
                 else:
-                    print(f"{name} {year}: у Dukascopy нет данных")
+                    log(f"{name} {year}: у Dukascopy нет данных")
             except Exception as e:
-                print(f"{name} {year}: не скачался ({e})")
+                log(f"{name} {year}: не скачался ({e})")
         npath = os.path.join(HIST, f"news-{year}.json")
         if not os.path.exists(npath):
             try:
                 ev = fetch_news_year(year)
                 write(npath, json.dumps(ev, ensure_ascii=False, separators=(",", ":")))
-                print(f"Новости {year}: {len(ev)}")
+                log(f"Новости {year}: {len(ev)}")
             except Exception as e:
-                print(f"Новости {year}: не скачались ({e})")
+                log(f"Новости {year}: не скачались ({e})")
         build_index()
     build_index()
 
